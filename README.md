@@ -68,18 +68,19 @@ BUGSY addresses these challenges by combining novelty-driven autonomous explorat
 
 ## 4. System Architecture
 
-BUGSY consists of the following major components:
+BUGSY integrates two collaborative, decoupled modules operating within the same Unity parkour simulation:
 
-| Component | Responsibility |
-|---|---|
-| Unity Game Environment | Provides the interactive parkour environment |
-| BugsyAgent | Controls the autonomous player using PPO |
-| CoverageTracker | Tracks visited spatial cells and calculates novelty rewards |
-| GameManager | Manages gameplay and episode flow |
-| BugsyAnomalyDetector | Identifies potential physics inconsistencies |
-| Fault Injectors | Introduce controlled physical anomalies |
-| BugsyGroundTruthRecorder | Records successful fault injection events |
-| Evaluation Pipeline | Compares ground-truth events with detector alerts |
+| Subsystem | Component | Responsibility | Contributor |
+|---|---|---|---|
+| **Shared Simulation** | Unity Game Environment | Procedural parkour maze with dynamic obstacles & physics | Shared |
+| **Shared Simulation** | GameManager | Episode lifecycle, player lives, state resets | Shared |
+| **Autonomous Navigation** | BugsyAgent | PPO reinforcement learning policy driving player navigation | **Kezia** |
+| **Autonomous Navigation** | CoverageTracker | Count-based spatial novelty tracking & intrinsic reward generator | **Kezia** |
+| **Autonomous Navigation** | Navigation Suite | Baseline benchmarks, PPO training configs, evaluation figures | **Kezia** ([`navigation/`](navigation/)) |
+| **Anomaly Detection** | BugsyAnomalyDetector | Rule-based physics invariant monitor (velocity, position, penetration) | **Nivedita** |
+| **Anomaly Detection** | Fault Injectors | Controlled perturbations (teleportation, velocity spikes) | **Nivedita** |
+| **Anomaly Detection** | BugsyGroundTruthRecorder | Synchronized injection event recorder with monotonic timestamps | **Nivedita** |
+| **Anomaly Detection** | Evaluation Pipeline | Offline event matching, detection latency, sensitivity analysis | **Nivedita** ([`evaluation/`](evaluation/)) |
 
 ### System Workflow
 
@@ -363,6 +364,17 @@ A comparable detector-disabled baseline has not yet been established. Pooled med
 | CSV | Ground-truth and detector event storage |
 | Matplotlib | Evaluation visualizations |
 
+## Contributors
+
+| Contributor | Focus Area | Primary Directories & Scripts |
+|---|---|---|
+| **Kezia** | **Autonomous Navigation & RL Exploration** | [`navigation/`](navigation/), `Assets/Scripts/BugsyAgent.cs`, `CoverageTracker.cs`, `PlayerController.cs`, `WallFollowerBrain.cs` |
+| **Nivedita** | **Physics-Based Anomaly Detection & Testing** | [`evaluation/`](evaluation/), `Assets/Scripts/BugsyAnomalyDetector.cs`, `BugsyGroundTruthRecorder.cs`, `Bugsy*Bug.cs` |
+
+Both modules operate within the **same unified Unity environment** (`Assets/`). Kezia's RL agent provides autonomous exploration through dynamic obstacles, while Nivedita's anomaly detector continuously monitors the agent's physical interactions to detect and log bugs. Detailed documentation for each module can be found in [`navigation/README.md`](navigation/README.md) and [`evaluation/README.md`](evaluation/README.md).
+
+---
+
 ## 11. Project Structure
 
 This tree lists the files and Unity assets included in the repository. Unity cache folders and local runtime logs are excluded; curated evaluation outputs under `evaluation/results/` are kept and labelled provisional where applicable.
@@ -576,6 +588,29 @@ BUGSY/
 │   ├── VersionControlSettings.asset
 │   ├── VFXManager.asset
 │   └── XRSettings.asset
+├── navigation/
+│   ├── baseline-results/           # 100-episode evaluation CSVs (Random, Wall-Follower, PPO, Ablations)
+│   │   ├── baseline_random.csv
+│   │   ├── baseline_wallfollower.csv
+│   │   ├── baseline_v8.csv
+│   │   ├── baseline_v8_unseen.csv
+│   │   ├── baseline_v9.csv
+│   │   ├── baseline_nomap.csv
+│   │   └── baseline_nomap300.csv
+│   ├── figures/                    # Generated evaluation charts (coverage, regret, distribution)
+│   │   ├── fig1_cumulative_unique.png
+│   │   ├── fig2_coverage_improved.png
+│   │   ├── fig3_success_rate.png
+│   │   ├── fig4_generalization_gap.png
+│   │   ├── fig5_coverage_distribution.png
+│   │   └── fig11_cumulative_regret_difference.png
+│   ├── models/                     # Exported ONNX neural network policies
+│   │   ├── BugsyAgent_v8.onnx
+│   │   └── BugsyAgent_v9.onnx
+│   ├── BUGSY_Parkour_RL_Explanation.md # Full line-by-line script explanation & RL mathematics
+│   ├── bugsy_ppo.yaml              # ML-Agents PPO training configuration
+│   ├── make_figures.py             # Evaluation statistics & figure plotting script
+│   └── README.md                   # Navigation module documentation
 ├── .gitignore
 ├── bugsy_ppo.yaml
 └── README.md
@@ -595,7 +630,7 @@ The project was developed using Unity 6 and Unity ML-Agents.
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/nivedita-rmsh/BUGSY.git
+git clone https://github.com/keziahgeorge/BUGSY.git
 cd BUGSY
 ```
 
@@ -659,13 +694,46 @@ Unity stores runtime records under:
 Application.persistentDataPath
 ```
 
-On the development Mac, this resolved to:
+On Windows, this resolves to:
+
+```text
+%USERPROFILE%\AppData\LocalLow\DefaultCompany\BUGSY_Parkour\
+```
+
+On macOS:
 
 ```text
 ~/Library/Application Support/DefaultCompany/BUGSY_Parkour/
 ```
 
 The structured detector event log, ground-truth records and performance measurements are stored separately.
+
+### Running Navigation Analysis & Figures
+
+To compute statistics (Bootstrap CI, Wilson score intervals, regret) and generate exploration charts from baseline evaluation CSVs:
+
+```bash
+cd navigation
+pip install pandas matplotlib numpy
+python make_figures.py
+```
+
+Outputs (charts and `summary_table.csv`) are written to `navigation/figures/`.
+
+### Training the Navigation Agent with PPO
+
+To train the exploration policy from scratch using Unity ML-Agents:
+
+```bash
+pip install mlagents
+mlagents-learn navigation/bugsy_ppo.yaml --run-id=bugsy_training --force
+```
+
+Press **Play** in Unity when prompted. To monitor training progress in real-time:
+
+```bash
+tensorboard --logdir results/
+```
 
 ## 14. Evaluation Framework
 
